@@ -29,9 +29,14 @@ var hiddenBorderWidth = 20;
 var changeLimit = 0.2; // To prevent movement that appears too sudden
 
 // If Boids get closer to each other than this, they begin to steer away
-var desiredSeparation = 70;
+var desiredSeparation = 60;
 // Relative importance of the separation behaviour
 var separationWeight = 1;
+
+var neighbourhoodRadius = 200;
+
+// Relative importance of alignment behaviour
+var alignmentWeight = 1;
 
 
 function setup() {
@@ -72,7 +77,7 @@ function Boid(location, direction) {
  * Boid.prototype.flock - Apply flocking rules
  *
  * 1. Separation
- * 2. TODO: Alignment
+ * 2. Alignment
  * 3. TODO: Cohesion
  *
  * FIXME: No clever data structures here, so the asymptotic complexity
@@ -84,9 +89,10 @@ function Boid(location, direction) {
  */
 Boid.prototype.flock = function(boids) {
 
+  var alignmentChange = this.getAlignmentChange(boids);
   var separationChange = this.getSeparationChange(boids);
 
-  var totalChange = separationChange; // Add them all up
+  var totalChange = p5.Vector.add(alignmentChange, separationChange); // Add them all up
   totalChange.limit(changeLimit);
 
   this.direction.add(totalChange);
@@ -94,11 +100,40 @@ Boid.prototype.flock = function(boids) {
 }
 
 /**
+ * Boid.prototype.getAlignmentChange
+ *
+ * @param  {Array} boids Array of all Boids
+ * @return {p5.Vector} Scaled change vector for Boid to attempt to
+ * move in the same direction with its neighbours.
+ */
+Boid.prototype.getAlignmentChange = function(boids) {
+  var change = createVector(0, 0);
+  var numChanges = 0;
+  for (var i = 0; i < boids.length; i++) {
+    if (boids[i] == this) {
+      continue;
+    }
+    var diff = p5.Vector.sub(this.location, boids[i].location);
+    var distance = diff.mag();
+    if (distance < neighbourhoodRadius) {
+      var diffInDirection = p5.Vector.sub(this.direction, boids[i].direction);
+      change.add(diffInDirection);
+      numChanges++;
+    }
+
+  }
+  if (numChanges > 0) {
+    change.div(numChanges);
+  }
+  return change.mult(alignmentWeight);
+}
+
+/**
  * Boid.prototype.getSeparationChange
  *
  * FIXME: This doesn't consider the wraparound.
  *
- * @param  {type} boids Array of all Boids
+ * @param  {Array} boids Array of all Boids
  * @return {p5.Vector} Scaled change vector for Boid to attempt to avoid
  * collisions with its neighbours.
  */
