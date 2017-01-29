@@ -1,20 +1,50 @@
-var boids = [];
-var boidSize = 20;
+/**
+ * Global storage
+ */
+
 var canvas;
+var boids = [];
+
+/**
+ * General settings
+ */
+
+// Length of a Boid from tip to back
+var boidSize = 20;
+// Canvas size
 var canvasX = 720;
 var canvasY = 400;
+// Number of Boids in play
+var numBoids = 13;
+
+var boidSpeed = 2;
+
+// Hacky estimated overflow for a Boid to have escaped the canvas completely... TODO: fix.
 var hiddenBorderWidth = 20;
+
+/**
+ * Flocking settings
+ */
+
+var changeLimit = 0.2; // To prevent movement that appears too sudden
+
+// If Boids get closer to each other than this, they begin to steer away
+var desiredSeparation = 70;
+// Relative importance of the separation behaviour
+var separationWeight = 1;
+
 
 function setup() {
   canvas = createCanvas(canvasX, canvasY);
   noStroke();
 
-  for (var i = 0; i < 13; i++) {
+  for (var i = 0; i < numBoids; i++) {
     var x = random(width);
     var y = random(height);
-    var direction = createVector(random(width*2)-width, random(height*2)-height);
-    direction.setMag(1); // Normalize
-    boids[i] = new Boid(x, y, direction);
+    var location = createVector(x, y);
+    var direction = p5.Vector.random2D();
+    direction.normalize(); // Set length to 1
+    boids[i] = new Boid(location, direction);
   }
 }
 
@@ -22,15 +52,75 @@ function draw() {
   background('darkslategrey');
 
   for (var i = 0; i < boids.length; i++) {
+    boids[i].flock(boids);
     boids[i].draw();
     boids[i].move();
     boids[i].wrapAround();
   }
 }
 
-function Boid(x, y, direction) {
-  this.location = createVector(x, y);
+/**
+ * Class Boid
+ */
+
+function Boid(location, direction) {
+  this.location = location;
   this.direction = direction;
+}
+
+/**
+ * Boid.prototype.flock - Apply flocking rules
+ *
+ * 1. Separation
+ * 2. TODO: Alignment
+ * 3. TODO: Cohesion
+ *
+ * FIXME: No clever data structures here, so the asymptotic complexity
+ * for checking this for all Boids is O(n^2) (for each Boid we need to
+ * check each other Boid to see if it needs to interact with that one).
+ * This is OK with the default number of Boids being low.
+ *
+ * @param  {type} boids Array of all Boids
+ */
+Boid.prototype.flock = function(boids) {
+
+  var separationChange = this.getSeparationChange(boids);
+
+  var totalChange = separationChange; // Add them all up
+  totalChange.limit(changeLimit);
+
+  this.direction.add(totalChange);
+  this.direction.normalize();
+}
+
+/**
+ * Boid.prototype.getSeparationChange
+ *
+ * FIXME: This doesn't consider the wraparound.
+ *
+ * @param  {type} boids Array of all Boids
+ * @return {p5.Vector} Scaled change vector for Boid to attempt to avoid
+ * collisions with its neighbours.
+ */
+Boid.prototype.getSeparationChange = function(boids) {
+  var change = createVector(0, 0);
+  var numChanges = 0;
+  for (var i = 0; i < boids.length; i++) {
+    var diff = p5.Vector.sub(this.location, boids[i].location);
+    var distance = diff.mag();
+    if (distance != 0 && distance < desiredSeparation) {
+      // Steer away from the neighbour
+      diff.normalize();
+      // Make a sharper turn the closer you are
+      diff.div(distance);
+      change.add(diff);
+      numChanges++;
+    }
+  }
+  if (numChanges > 0) {
+    change.div(numChanges);
+  }
+  return change.mult(separationWeight);
 }
 
 /**
@@ -38,6 +128,8 @@ function Boid(x, y, direction) {
  *
  * The Boid is a triangle with the narrow end pointing towards its
  * current direction.
+ *
+ * TODO: Make them look more like paper planes
  */
 Boid.prototype.draw = function() {
   var coords = getTriangleAlignMentFromDirection(this.direction);
@@ -53,7 +145,7 @@ Boid.prototype.draw = function() {
  * Boid.prototype.move - Move a Boid
  */
 Boid.prototype.move = function() {
-  this.location.add(p5.Vector.mult(this.direction, 2));
+  this.location.add(p5.Vector.mult(this.direction, boidSpeed));
 }
 
 /**
